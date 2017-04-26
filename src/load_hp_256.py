@@ -1,5 +1,5 @@
 
-def main():
+def main(glatrange=90,elatrange=90):
     import numpy as np
     import healpy as hp
     import pandas as pd
@@ -117,11 +117,11 @@ def main():
     elon = hp.read_map(filepath+str(nside)+"_nside/pixel_coords_map_ring_ecliptic_res8.fits", field = 0, memmap=False)
     elat = hp.read_map(filepath+str(nside)+"_nside/pixel_coords_map_ring_ecliptic_res8.fits", field = 1, memmap=False)
 
-    glatrange = 2.0
-    elatrange = 10.0
+    #glatrange = 0.01
+    #elatrange = 0
 
-    gcut_1 = np.where((abs(glat) > glatrange) & (abs(elat) > elatrange))
-    gcut_2 = np.where((abs(glat) < glatrange) & (abs(elat) > elatrange))
+    #gcut_1 = np.where((abs(glat) > glatrange) & (abs(elat) > elatrange))
+    gcut = np.where((abs(glat) < glatrange) & (abs(elat) > elatrange))
 
 
     ## Replace the HEALPix "UNSEEN" pixels with NaN, in a Pandas Dataframe:
@@ -136,14 +136,14 @@ def main():
     #phot_modesub = pd.DataFrame(phot.values-allsky_modes.values,columns=phot.columns)
 
 
-    gcut_2 = np.array(gcut_2)
-    gcut_2 = np.ndarray.flatten(gcut_2)
+    gcut = np.array(gcut)
+    gcut = np.ndarray.flatten(gcut)
 
     #from sklearn.externals.joblib import parallel
 
     #parallel.MIN_IDEAL_BATCH_DURATION = 1.
     #parallel.MAX_IDEAL_BATCH_DURATION = parallel.MIN_IDEAL_BATCH_DURATION * 100
-    return phot, gcut_2
+    return phot, gcut
 
 if __name__ == '__main__':
     main()

@@ -39,15 +39,15 @@ def merge(left, right):
       break
   return a
 
-if __name__ == '__main__':
-  try:
-    cores = int(sys.argv[1]) #get the number of cores
-    if cores > 1:
-      if cores % 2 != 0:  # restrict core count to even numbers
-        cores -= 1
-    print 'Using %d cores'%cores
-  except:
-    cores = 1
+def main(lst,cores=4):
+    # Check that the number of cores is valid
+    try:
+        if cores > 1:
+            if cores % 2 != 0:  # restrict core count to even numbers
+                cores -= 1
+            print 'Using %d cores'%cores
+    except:
+        cores = 1
 
   '''instantiate a multiprocessing.Manager object to store the output of each process,
   see example here http://docs.python.org/library/multiprocessing.html#sharing-state-between-processes '''
@@ -55,27 +55,16 @@ if __name__ == '__main__':
   responses = manager.list()
 
   # randomize the length of our list
-  l = random.randint(3*10**4, 3*10**5)
-  print 'List length : ', l
+  #l = random.randint(3*10**4, 3*10**5)
+  #print 'List length : ', l
 
-  # create an unsorted list with random numbers
-  start_time = time.time()
-  a = [ random.randint(0, n*100) for n in range(0, l) ]
-  print 'Random list generated in ', time.time() - start_time
-  # start timing the single-core procedure
-  start_time = time.time()
-  single = merge_sort(a)
-  single_core_time = time.time() - start_time
-  a_sorted = a[:]
-  a_sorted.sort()
-  ''' comparison with Python list's "sort" method, validation of the algorithm
-  (it has to work right, doesn't it??) '''
-  print 'Verification of sorting algorithm', a_sorted == single
-  print 'Single Core: %4.6f sec'%( single_core_time )
-  if cores > 1:
+  # Get the length of the list:
+  l = len(lst)
+
+
     ''' we collect the list element count and the time taken
     for each of the procedures in a file '''
-    f = open('mergesort-'+str(cores)+'.dat', 'a')
+    f = open('mergesort-'+str(cores)+'.dat', 'lst')
     print 'Starting %d-core process'%cores
     start_time = time.time()
     # divide the list in "cores" parts
@@ -86,10 +75,10 @@ if __name__ == '__main__':
       ''' we create a new Process object and assign the "merge_sort_multi" function to it,
       using as input a sublist '''
       if n < cores - 1:
-        proc = Process( target=merge_sort_multi, args=( a[n*step:(n+1)*step], ) )
+        proc = Process( target=merge_sort_multi, args=( lst[n*step:(n+1)*step], ) )
       else:
         # get the remaining elements in the list
-        proc = Process( target=merge_sort_multi, args=( a[n*step:], ) )
+        proc = Process( target=merge_sort_multi, args=( lst[n*step:], ) )
       p.append(proc)
 
     ''' http://docs.python.org/library/multiprocessing.html#multiprocessing.Process.start &
@@ -116,15 +105,17 @@ if __name__ == '__main__':
       for proc in p:
         proc.join()
     # finally we have 2 sublists which need to be merged
-    a = merge(responses[0], responses[1])
+    lst = merge(responses[0], responses[1])
     # ... anddd time!
     final_merge_time = time.time() - start_time_final_merge
     print 'Final merge duration : ', final_merge_time
     multi_core_time = time.time() - start_time
     # of course we double-check that we did everything right
-    print 'Sorted arrays equal : ', (a == single)
+    print 'Sorted arrays equal : ', (lst == single)
     print '%d-Core ended: %4.6f sec'%(cores, multi_core_time)
     # we write down the results in our log file
     f.write("%d %4.3f %4.3f %4.2f %4.3f\n"%(l, single_core_time, multi_core_time,\
             multi_core_time/single_core_time, final_merge_time))
     f.close()
+
+    return lst

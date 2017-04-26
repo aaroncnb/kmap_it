@@ -14,7 +14,7 @@ def kmap_it(data,subset='all', projection='t_SNE',path_html="../out/phot_km_outp
     timestamp = dt.datetime.now().strftime('%m%d%H%M%S')
 
     if subset == 'all':
-        data = data.dropna().values[::10]
+        data = data.dropna().values
     else:
         data = data.dropna().values[subset]
 #    else:
@@ -31,7 +31,7 @@ def kmap_it(data,subset='all', projection='t_SNE',path_html="../out/phot_km_outp
     # DBSCAN will ignore the "n_jobs_ keyword unless you set 'algorithm='brute''
     # I still don't understand the difference between the 'auto' and 'brute' algorithms, though...
     complex = mapper.map(projected_data,
-                         clusterer=sklearn.cluster.DBSCAN(eps=0.01,min_samples=16),nr_cubes=10)
+                         clusterer=sklearn.cluster.DBSCAN(eps=0.5,min_samples=3))
     print "Mapping finished! "
     # Visualize it
     mapper.visualize(complex, path_html=path_html+timestamp+".html",
@@ -40,18 +40,15 @@ def kmap_it(data,subset='all', projection='t_SNE',path_html="../out/phot_km_outp
     shutil.copyfile("main.py","../out/main_"+timestamp+".py")
 
 
-
-
+#from sklearn.decomposition import PCA
 #from sklearn.decomposition import tSNE
 
 
 
 
 #kmap_it(phot, projection=PCA(), algorithm='auto', path_html="phot_keplermapper_output_PCA_gcut2.html")
-phot, gcut = load_hp_256.main(glatrange=90, elatrange=0)
+phot, gcut = load_hp_256.main(glatrange=1, elatrange=25,)
 from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
 
 #kmap_it(phot, subset=gcut[2000:2050],  projection='t_SNE', path_html="../out/phot_km_output_tSNE")
-#kmap_it(phot, subset=gcut,  projection=TSNE(), path_html="../out/phot_km_output_tSNE_")
-kmap_it(phot, subset='all',  projection=PCA(n_components=2, whiten=False), path_html="../out/phot_km_output_PCA_allsky_")
+kmap_it(phot, subset=gcut[2000:3000],  projection=TSNE(), path_html="../out/phot_km_output_tSNE_")

@@ -99,8 +99,7 @@ class KeplerMapper(object):
 
     return X
 
-  def map(self, projected_X, inverse_X=None, clusterer=cluster.DBSCAN(eps=0.5,min_samples=3), nr_cubes=10,
-overlap_perc=0.1):
+  def map(self, projected_X, inverse_X=None, clusterer=cluster.DBSCAN(eps=0.5,min_samples=3), nr_cubes=10, overlap_perc=0.1):
     # This maps the data to a simplicial complex. Returns a dictionary with nodes and links.
     #
     # Input:    projected_X. A Numpy array with the projection/lens.
@@ -118,179 +117,96 @@ overlap_perc=0.1):
 
     # Helper function
     def cube_coordinates_all(nr_cubes, nr_dimensions):
-        # Helper function to get origin coordinates for our intervals/hypercubes
-        # Useful for looping no matter the number of cubes or dimensions
-        # Example:   	if there are 4 cubes per dimension and 3 dimensions
-        #       		return the bottom left (origin) coordinates of 64 hypercubes,
-        #       		as a sorted list of Numpy arrays
-        # TODO: elegance-ify...
-        print "Starting cube_coordinates_all over all dimensions and cubes"
-
-        l = []
-        print l
-        #print "nr_cubes= "+str(nr_cubes)
-        #print "nr_dimensions= "+str(nr_dimensions)
-        for x in range(nr_cubes):
-            l += [x] * nr_dimensions
-        print "Finished loop over nr_cubes"
-
-
-        # let's try precomputing itertools.permutations:
-        # Otherwise we can't tell which step exactly is taking so long
-
-        print "Starting itertools.permutations"
-        perm = itertools.permutations(l,nr_dimensions)
-
-
-        print "Starting sorting of itertools.permutations"
-
-        # It looks like the sorting part is what takes the longest...
-        # So let's try to multiprocess it:
-        #from multiprocessing import Pool
-
-        def worker_A(perm):
-            '''After a lot of testing, it looks like this sorting
-            step is the real time-consumer here. Multi-processing it
-            is not an easy one-liner.. but I found several examples
-            where splitting the list into pieces, sorting those independently
-            and then merging them back together can allow for parallelization.
-            '''
-            print "Setting permutations"
-            return sorted(set(perm))
-            #print "Perm length = "+str(len(perm))
-            #perm = set(perm)
-            #print "Merge-sorting perumatations"
-
-            #return mergeSort_aaron.main(cores=4, perm)
-
-        #worker_A(perm)
-
-        # Try sorting with the "merge_sort" example:
-
-        #def worker_A():
-        #    import mergeSort_aaron
-
-        def worker_B(sorted_perm):
-            print "Started worker_B: Re-shaping set into array"
-            return [np.array(list(f)) for f in sorted_perm]
-
-        print "Starting pooling"
-
-        #pool = Pool(processes=4, maxtasksperchild=1)
-
-        #results = pool.map(worker_B,perm)
-
-        results = worker_B(perm)
-
-
-        #results = worker_B(sorted_perm)
-        #pool.close()
-        #pool.join()
-
-        #with multiprocessing.Pool() as pool:
-            #results = pool.map(worker,perm)
-        return results
-
+      # Helper function to get origin coordinates for our intervals/hypercubes
+      # Useful for looping no matter the number of cubes or dimensions
+      # Example:   	if there are 4 cubes per dimension and 3 dimensions
+      #       		return the bottom left (origin) coordinates of 64 hypercubes,
+      #       		as a sorted list of Numpy arrays
+      # TODO: elegance-ify...
+      l = []
+      for x in range(nr_cubes):
+        l += [x] * nr_dimensions
+      return [np.array(list(f)) for f in sorted(set(itertools.permutations(l,nr_dimensions)))]
 
     nodes = defaultdict(list)
     links = defaultdict(list)
     complex = {}
-    print "A"
     self.nr_cubes = nr_cubes
-    #print "B: nr_cubes= "+str(nr_cubes)
     self.clusterer = clusterer
     self.overlap_perc = overlap_perc
 
     if self.verbose > 0:
-        print("Mapping on data shaped %s using dimensions\n"%(str(projected_X.shape)))
+      print("Mapping on data shaped %s using dimensions\n"%(str(projected_X.shape)))
 
     # If inverse image is not provided, we use the projection as the inverse image (suffer projection loss)
     if inverse_X is None:
-        inverse_X = projected_X
+      inverse_X = projected_X
 
     # We chop up the min-max column ranges into 'nr_cubes' parts
-    print "Chopping up min-max column ranges"
     self.chunk_dist = (np.max(projected_X, axis=0) - np.min(projected_X, axis=0))/nr_cubes
 
     # We calculate the overlapping windows distance
-    print "Calculating overlapping windows distance"
     self.overlap_dist = self.overlap_perc * self.chunk_dist
 
     # We find our starting point
-    print "Find our starting point"
     self.d = np.min(projected_X, axis=0)
 
     # Use a dimension index array on the projected X
     # (For now this uses the entire dimensionality, but we keep for experimentation)
-    print "Use a dimension index array on the projected X"
     di = np.array([x for x in range(projected_X.shape[1])])
 
     # Prefix'ing the data with ID's
-    print "Prefix'ing the data with ID's"
     ids = np.array([x for x in range(projected_X.shape[0])])
     projected_X = np.c_[ids,projected_X]
     inverse_X = np.c_[ids,inverse_X]
-    #print "C: nr_cubes= "+str(nr_cubes)
+
     # Subdivide the projected data X in intervals/hypercubes with overlap
-
-    #if 5>1:
-    #    print "Arbitrary if statemnet here"
-    #if 5>1:
-    #    print "Arbitrary if statemnet here"
     if self.verbose > 0:
-        print "Running cube_coordintes_all to get total cubes (verbose>0)"
-        total_cubes_ = cube_coordinates_all(nr_cubes,projected_X.shape[1])
-        print "cube_coordinates_all finished"
-        print "Getting length of cube_coordinates_all"
-        total_cubes = len(total_cubes_)
-        #print("Creating %s hypercubes."%total_cubes)
-    print "Slice the hypercube"
-    for i, coor in enumerate(cube_coordinates_all(nr_cubes,di.shape[0])):
-        # Slice the hypercube
-        hypercube = projected_X[ np.invert(np.any((projected_X[:,di+1] >= self.d[di] + (coor *
-self.chunk_dist[di])) &
-          (projected_X[:,di+1] < self.d[di] + (coor * self.chunk_dist[di]) + self.chunk_dist[di] +
-self.overlap_dist[di]) == False, axis=1 )) ]
+      total_cubes = len(cube_coordinates_all(nr_cubes,projected_X.shape[1]))
+      print("Creating %s hypercubes."%total_cubes)
 
-        if self.verbose > 1:
-            print("There are %s points in cube_%s / %s with starting range %s"%
+    for i, coor in enumerate(cube_coordinates_all(nr_cubes,di.shape[0])):
+      # Slice the hypercube
+      hypercube = projected_X[ np.invert(np.any((projected_X[:,di+1] >= self.d[di] + (coor * self.chunk_dist[di])) &
+          (projected_X[:,di+1] < self.d[di] + (coor * self.chunk_dist[di]) + self.chunk_dist[di] + self.overlap_dist[di]) == False, axis=1 )) ]
+
+      if self.verbose > 1:
+        print("There are %s points in cube_%s / %s with starting range %s"%
               (hypercube.shape[0],i,total_cubes,self.d[di] + (coor * self.chunk_dist[di])))
 
       # If at least one sample inside the hypercube
-        if hypercube.shape[0] > 0:
+      if hypercube.shape[0] > 0:
         # Cluster the data point(s) in the cube, skipping the id-column
         # Note that we apply clustering on the inverse image (original data samples) that fall inside the cube.
-            inverse_x = inverse_X[[int(nn) for nn in hypercube[:,0]]]
+        inverse_x = inverse_X[[int(nn) for nn in hypercube[:,0]]]
 
-            clusterer.fit(inverse_x[:,1:])
+        clusterer.fit(inverse_x[:,1:])
 
         if self.verbose > 1:
-            print("Found %s clusters in cube_%s\n"%(np.unique(clusterer.labels_[clusterer.labels_ >
--1]).shape[0],i))
+          print("Found %s clusters in cube_%s\n"%(np.unique(clusterer.labels_[clusterer.labels_ > -1]).shape[0],i))
 
         #Now for every (sample id in cube, predicted cluster label)
         for a in np.c_[hypercube[:,0],clusterer.labels_]:
-            if a[1] != -1: #if not predicted as noise
-                cluster_id = str(coor[0])+"_"+str(i)+"_"+str(a[1])+"_"+str(coor)+"_"+str(self.d[di] + (coor *
-self.chunk_dist[di])) # TODO: de-rudimentary-ify
-                nodes[cluster_id].append( int(a[0]) ) # Append the member id's as integers
-        else:
-            if self.verbose > 1:
-                print("Cube_%s is empty.\n"%(i))
+          if a[1] != -1: #if not predicted as noise
+            cluster_id = str(coor[0])+"_"+str(i)+"_"+str(a[1])+"_"+str(coor)+"_"+str(self.d[di] + (coor * self.chunk_dist[di])) # TODO: de-rudimentary-ify
+            nodes[cluster_id].append( int(a[0]) ) # Append the member id's as integers
+      else:
+        if self.verbose > 1:
+          print("Cube_%s is empty.\n"%(i))
 
     # Create links when clusters from different hypercubes have members with the same sample id.
     candidates = itertools.combinations(nodes.keys(),2)
     for candidate in candidates:
-        # if there are non-unique members in the union
-        if len(nodes[candidate[0]]+nodes[candidate[1]]) != len(set(nodes[candidate[0]]+nodes[candidate[1]])):
-            links[candidate[0]].append( candidate[1] )
+      # if there are non-unique members in the union
+      if len(nodes[candidate[0]]+nodes[candidate[1]]) != len(set(nodes[candidate[0]]+nodes[candidate[1]])):
+        links[candidate[0]].append( candidate[1] )
 
     # Reporting
     if self.verbose > 0:
-        nr_links = 0
-        for k in links:
-            nr_links += len(links[k])
-        print("\ncreated %s edges and %s nodes in %s."%(nr_links,len(nodes),str(datetime.now()-start)))
+      nr_links = 0
+      for k in links:
+        nr_links += len(links[k])
+      print("\ncreated %s edges and %s nodes in %s."%(nr_links,len(nodes),str(datetime.now()-start)))
 
     complex["nodes"] = nodes
     complex["links"] = links
@@ -298,7 +214,7 @@ self.chunk_dist[di])) # TODO: de-rudimentary-ify
 
     return complex
 
-  def visualize(self, complex, color_function="", path_html="mapper_visualization_output.html", title="MyData",
+  def visualize(self, complex, color_function="", path_html="mapper_visualization_output.html", title="My Data",
           graph_link_distance=30, graph_gravity=0.1, graph_charge=-120, custom_tooltips=None, width_html=0,
           height_html=0, show_tooltips=True, show_title=True, show_meta=True):
     # Turns the dictionary 'complex' in a html file with d3.js
@@ -328,59 +244,54 @@ self.chunk_dist[di])) # TODO: de-rudimentary-ify
     k2e = {} # a key to incremental int dict, used for id's when linking
 
     for e, k in enumerate(complex["nodes"]):
-        # Tooltip and node color formatting, TODO: de-mess-ify
-        if custom_tooltips is not None:
-            tooltip_s = "<h2>Cluster %s</h2>"%k + " ".join([str(f) for f in
-custom_tooltips[complex["nodes"][k]]])
-            if color_function == "average_signal_cluster":
-                tooltip_i = int(((sum([f for f in custom_tooltips[complex["nodes"][k]]]) /
-len(custom_tooltips[complex["nodes"][k]])) * 30) )
-                json_s["nodes"].append({"name": str(k), "tooltip": tooltip_s, "group": 2 *
-int(np.log(len(complex["nodes"][k]))), "color": str(tooltip_i)})
-            else:
-                json_s["nodes"].append({"name": str(k), "tooltip": tooltip_s, "group": 2 *
-int(np.log(len(complex["nodes"][k]))), "color": str(k.split("_")[0])})
+      # Tooltip and node color formatting, TODO: de-mess-ify
+      if custom_tooltips is not None:
+        tooltip_s = "<h2>Cluster %s</h2>"%k + " ".join([str(f) for f in custom_tooltips[complex["nodes"][k]]])
+        if color_function == "average_signal_cluster":
+          tooltip_i = int(((sum([f for f in custom_tooltips[complex["nodes"][k]]]) / len(custom_tooltips[complex["nodes"][k]])) * 30) )
+          json_s["nodes"].append({"name": str(k), "tooltip": tooltip_s, "group": 2 * int(np.log(len(complex["nodes"][k]))), "color": str(tooltip_i)})
         else:
-            tooltip_s = "<h2>Cluster %s</h2>Contains %s members."%(k,len(complex["nodes"][k]))
-            json_s["nodes"].append({"name": str(k), "tooltip": tooltip_s, "group": 2 *
-int(np.log(len(complex["nodes"][k]))), "color": str(k.split("_")[0])})
-        k2e[k] = e
+          json_s["nodes"].append({"name": str(k), "tooltip": tooltip_s, "group": 2 * int(np.log(len(complex["nodes"][k]))), "color": str(k.split("_")[0])})
+      else:
+        tooltip_s = "<h2>Cluster %s</h2>Contains %s members."%(k,len(complex["nodes"][k]))
+        json_s["nodes"].append({"name": str(k), "tooltip": tooltip_s, "group": 2 * int(np.log(len(complex["nodes"][k]))), "color": str(k.split("_")[0])})
+      k2e[k] = e
     for k in complex["links"]:
-        for link in complex["links"][k]:
-            json_s["links"].append({"source": k2e[k], "target":k2e[link],"value":1})
+      for link in complex["links"][k]:
+        json_s["links"].append({"source": k2e[k], "target":k2e[link],"value":1})
 
     # Width and height of graph in HTML output
     if width_html == 0:
-        width_css = "100%"
-        width_js = 'document.getElementById("holder").offsetWidth-20'
+      width_css = "100%"
+      width_js = 'document.getElementById("holder").offsetWidth-20'
     else:
-        width_css = "%spx" % width_html
-        width_js = "%s" % width_html
+      width_css = "%spx" % width_html
+      width_js = "%s" % width_html
     if height_html == 0:
-        height_css = "100%"
-        height_js = 'document.getElementById("holder").offsetHeight-20'
+      height_css = "100%"
+      height_js = 'document.getElementById("holder").offsetHeight-20'
     else:
-        height_css = "%spx" % height_html
-        height_js = "%s" % height_html
+      height_css = "%spx" % height_html
+      height_js = "%s" % height_html
 
     # Whether to show certain UI elements or not
     if show_tooltips == False:
-        tooltips_display = "display: none;"
+      tooltips_display = "display: none;"
     else:
-        tooltips_display = ""
+      tooltips_display = ""
 
     if show_meta == False:
-        meta_display = "display: none;"
+      meta_display = "display: none;"
     else:
-        meta_display = ""
+      meta_display = ""
 
     if show_title == False:
-        title_display = "display: none;"
+      title_display = "display: none;"
     else:
-        title_display = ""
+      title_display = ""
 
     with open(path_html,"wb") as outfile:
-        html = """<!DOCTYPE html>
+      html = """<!DOCTYPE html>
     <meta charset="utf-8">
     <meta name="generator" content="KeplerMapper">
     <title>%s | KeplerMapper</title>
@@ -393,14 +304,10 @@ int(np.log(len(complex["nodes"][k]))), "color": str(k.split("_")[0])})
     .divs div { border-radius: 50%%; background: red; position: absolute; }
     .divs { position: absolute; top: 0; left: 0; }
     #holder { position: relative; width: %s; height: %s; background: #111; display: block;}
-    h1 { %s padding: 20px; color: #fafafa; text-shadow: 0px 1px #000,0px -1px #000; position: absolute; font:
-300 30px Roboto, Sans-serif;}
+    h1 { %s padding: 20px; color: #fafafa; text-shadow: 0px 1px #000,0px -1px #000; position: absolute; font: 300 30px Roboto, Sans-serif;}
     h2 { text-shadow: 0px 1px #000,0px -1px #000; font: 700 16px Roboto, Sans-serif;}
-    .meta {  position: absolute; opacity: 0.9; width: 220px; top: 80px; left: 20px; display: block; %s
-background: #000; line-height: 25px; color: #fafafa; border: 20px solid #000; font: 100 16px Roboto,
-Sans-serif;}
-    div.tooltip { position: absolute; width: 380px; display: block; %s padding: 20px; background: #000;
-border: 0px; border-radius: 3px; pointer-events: none; z-index: 999; color: #FAFAFA;}
+    .meta {  position: absolute; opacity: 0.9; width: 220px; top: 80px; left: 20px; display: block; %s background: #000; line-height: 25px; color: #fafafa; border: 20px solid #000; font: 100 16px Roboto, Sans-serif;}
+    div.tooltip { position: absolute; width: 380px; display: block; %s padding: 20px; background: #000; border: 0px; border-radius: 3px; pointer-events: none; z-index: 999; color: #FAFAFA;}
     }
     </style>
     <body>
@@ -420,10 +327,8 @@ border: 0px; border-radius: 3px; pointer-events: none; z-index: 999; color: #FAF
     var width = %s,
       height = %s;
     var color = d3.scale.ordinal()
-      .domain(["0","1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
-"13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30"])
-
-.range(["#FF0000","#FF1400","#FF2800","#FF3c00","#FF5000","#FF6400","#FF7800","#FF8c00","#FFa000","#FFb400","#FFc800","#FFdc00","#FFf000","#fdff00","#b0ff00","#65ff00","#17ff00","#00ff36","#00ff83","#00ffd0","#00e4ff","#00c4ff","#00a4ff","#00a4ff","#0084ff","#0064ff","#0044ff","#0022ff","#0002ff","#0100ff","#0300ff","#0500ff"]);
+      .domain(["0","1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30"])
+      .range(["#FF0000","#FF1400","#FF2800","#FF3c00","#FF5000","#FF6400","#FF7800","#FF8c00","#FFa000","#FFb400","#FFc800","#FFdc00","#FFf000","#fdff00","#b0ff00","#65ff00","#17ff00","#00ff36","#00ff83","#00ffd0","#00e4ff","#00c4ff","#00a4ff","#00a4ff","#0084ff","#0064ff","#0044ff","#0022ff","#0002ff","#0100ff","#0300ff","#0500ff"]);
     var force = d3.layout.force()
       .charge(%s)
       .linkDistance(%s)
@@ -439,8 +344,7 @@ border: 0px; border-radius: 3px; pointer-events: none; z-index: 999; color: #FAF
 
     var divs = d3.select('#holder').append('div')
       .attr('class', 'divs')
-      .attr('style', function(d) { return 'overflow: hidden; width: ' + width + 'px; height: ' + height +
-'px;'; });
+      .attr('style', function(d) { return 'overflow: hidden; width: ' + width + 'px; height: ' + height + 'px;'; });
 
       graph = %s;
       force
@@ -479,14 +383,10 @@ border: 0px; border-radius: 3px; pointer-events: none; z-index: 999; color: #FAF
         .attr("y2", function(d) { return d.target.y; });
       node.attr("cx", function(d) { return d.x; })
         .attr("cy", function(d) { return d.y; })
-        .attr('style', function(d) { return 'width: ' + (d.group * 2) + 'px; height: ' + (d.group * 2) + 'px;
-' + 'left: '+(d.x-(d.group))+'px; ' + 'top: '+(d.y-(d.group))+'px; background: '+color(d.color)+';
-box-shadow: 0px 0px 3px #111; box-shadow: 0px 0px 33px '+color(d.color)+', inset 0px 0px 5px rgba(0, 0, 0,
-0.2);'})
+        .attr('style', function(d) { return 'width: ' + (d.group * 2) + 'px; height: ' + (d.group * 2) + 'px; ' + 'left: '+(d.x-(d.group))+'px; ' + 'top: '+(d.y-(d.group))+'px; background: '+color(d.color)+'; box-shadow: 0px 0px 3px #111; box-shadow: 0px 0px 33px '+color(d.color)+', inset 0px 0px 5px rgba(0, 0, 0, 0.2);'})
         ;
       });
-    </script>"""%(title,width_css, height_css, title_display, meta_display, tooltips_display,
-title,complex["meta"],self.nr_cubes,self.overlap_perc*100,color_function,complex["meta"],str(self.clusterer),str(self.scaler),width_js,height_js,graph_charge,graph_link_distance,graph_gravity,json.dumps(json_s))
-        outfile.write(html.encode("utf-8"))
+    </script>"""%(title,width_css, height_css, title_display, meta_display, tooltips_display, title,complex["meta"],self.nr_cubes,self.overlap_perc*100,color_function,complex["meta"],str(self.clusterer),str(self.scaler),width_js,height_js,graph_charge,graph_link_distance,graph_gravity,json.dumps(json_s))
+      outfile.write(html.encode("utf-8"))
     if self.verbose > 0:
-        print("\nWrote d3.js graph to '%s'"%path_html)
+      print("\nWrote d3.js graph to '%s'"%path_html)

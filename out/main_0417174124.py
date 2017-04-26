@@ -31,7 +31,7 @@ def kmap_it(data,subset='all', projection='t_SNE',path_html="../out/phot_km_outp
     # DBSCAN will ignore the "n_jobs_ keyword unless you set 'algorithm='brute''
     # I still don't understand the difference between the 'auto' and 'brute' algorithms, though...
     complex = mapper.map(projected_data,
-                         clusterer=sklearn.cluster.DBSCAN(eps=0.01,min_samples=16),nr_cubes=10)
+                         clusterer=sklearn.cluster.DBSCAN(eps=0.1,min_samples=16),nr_cubes=10)
     print "Mapping finished! "
     # Visualize it
     mapper.visualize(complex, path_html=path_html+timestamp+".html",
